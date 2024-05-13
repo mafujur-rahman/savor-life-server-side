@@ -25,29 +25,66 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
-        await client.connect();
+        // await client.connect();
         const blogCollection = client.db('blogDB').collection('blog');
-        const commentCollection = client.db('blogDB').collection('comment');
+        const comments = client.db('blogDB').collection('comment');
+        const wishlistItems = client.db('blogDB').collection('wishlistItems')
 
-        app.get('/blogs', async (req, res) =>{
+        app.get('/blogs', async (req, res) => {
             const cursor = blogCollection.find();
-            const result =await cursor.toArray();
-            res.send(result)
-        })
-
-        app.get('/comments', async(req, res) =>{
-            const cursor = commentCollection.find();
             const result = await cursor.toArray();
             res.send(result)
         })
 
-        app.get('/blogs/:id', async(req, res) =>{
+        app.get('/wishlist-items', async (req, res) =>{
+            const cursor = wishlistItems.find();
+            const result = await cursor.toArray();
+            res.send(result)
+        })
+
+        app.get('/comments', async (req, res) => {
+            const cursor = comments.find();
+            const result = await cursor.toArray();
+            res.send(result)
+        })
+
+        app.get('/blogs/:id', async (req, res) => {
             const id = req.params.id;
-            const query = {_id : new ObjectId(id)}
+            const query = { _id: new ObjectId(id) }
             const result = await blogCollection.findOne(query);
             res.send(result)
         })
 
+        app.get('/top-blogs', async (req, res) => {
+            try {
+                const cursor = blogCollection.find();
+                const allBlogs = await cursor.toArray();
+        
+                // Calculate word count for each blog's long description and sort by word count
+                const sortedBlogs = allBlogs.sort((a, b) => {
+                    const wordCountA = a.longDescription.split(/\s+/).length;
+                    const wordCountB = b.longDescription.split(/\s+/).length;
+                    return wordCountB - wordCountA; // Sort in descending order
+                });
+        
+                // Get the top 10 blogs
+                const topBlogs = sortedBlogs.slice(0, 10);
+        
+                res.send(topBlogs);
+            } catch (error) {
+                console.error("Error fetching top blogs:", error);
+                res.status(500).send("Internal Server Error");
+            }
+        });
+
+        app.delete('/wishlist-items/:id', async(req, res) =>{
+            const id = req.params.id;
+            const query = {_id: new ObjectId(id)};
+            const result = await wishlistItems.deleteOne(query);
+            res.send(result);
+        })
+
+        
         app.post('/blogs', async (req, res) => {
             const newBlog = req.body;
             console.log(newBlog)
@@ -55,12 +92,42 @@ async function run() {
             res.send(result)
         })
 
-        app.post('/comments', async(req,res) =>{
+        app.post('/comments', async (req, res) => {
             const newComment = req.body;
             console.log(newComment);
-            const result = await commentCollection.insertOne(newComment);
+            const result = await comments.insertOne(newComment);
+            res.send(result)
+
+        })
+
+        app.post('/wishlist-items', async (req, res) => {
+            const newWishlist = req.body;
+            console.log(newWishlist);
+            const result = await wishlistItems.insertOne(newWishlist);
             res.send(result)
         })
+
+        
+
+        app.put('/blogs/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const options = { upsert: true };
+            const updatedBlog = req.body;
+            const blog = {
+              $set: {
+                img: updatedBlog.img,
+                title: updatedBlog.title,
+                category: updatedBlog.category,
+                shortDescription: updatedBlog.shortDescription,
+                longDescription: updatedBlog.longDescription,
+              }
+            }
+            const result = await blogCollection.updateOne(filter, blog, options);
+            res.send(result)
+          })
+      
+        
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
